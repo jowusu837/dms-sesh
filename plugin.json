@@ -1,0 +1,16 @@
+{
+  "id": "dmsSesh",
+  "name": "DMS Sesh",
+  "description": "Browse sesh sessions and projects from DankMaterialShell",
+  "version": "0.1.0",
+  "author": "Victor Owusu",
+  "icon": "terminal",
+  "type": "launcher",
+  "capabilities": ["launcher", "command-execution", "shell"],
+  "trigger": "se",
+  "viewMode": "list",
+  "viewModeEnforced": true,
+  "component": "./DMSSesh.qml",
+  "settings": "./DMSSeshSettings.qml",
+  "permissions": ["settings_read", "settings_write", "process"]
+}
