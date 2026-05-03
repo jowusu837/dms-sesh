@@ -15,3 +15,18 @@ A DankMaterialShell launcher plugin inspired by [dms-sessionizer](https://github
 - `plugin.json`
 - `DMSSesh.qml`
 - `DMSSeshSettings.qml`
+
+## Install
+
+```bash
+make validate
+make install
+```
+
+This installs the plugin into `~/.config/DankMaterialShell/plugins/DMSSesh` and then enables or reloads it in DMS.
+
+For a copied install instead of a symlink:
+
+```bash
+make install-copy
+```
