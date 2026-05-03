@@ -40,6 +40,14 @@ PluginSettings {
         defaultValue: "sesh"
     }
 
+    StringSetting {
+        settingKey: "configPath"
+        label: "Config Path"
+        description: "Optional absolute path to a custom sesh config. Leave empty to use $XDG_CONFIG_HOME/sesh/sesh.toml by default"
+        placeholder: "/path/to/sesh.toml"
+        defaultValue: ""
+    }
+
     DankDropdown {
         id: terminalDropdown
         text: "Terminal Emulator"
@@ -105,7 +113,7 @@ PluginSettings {
     ToggleSetting {
         settingKey: "includeConfig"
         label: "Include configured sessions"
-        description: "Show sessions defined in sesh.toml"
+        description: "Show sessions defined in the sesh config file"
         defaultValue: true
     }
 

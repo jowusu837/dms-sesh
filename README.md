@@ -7,7 +7,7 @@ A DankMaterialShell launcher plugin inspired by [dms-sessionizer](https://github
 - Search sesh results from the DMS launcher
 - Open tmux sessions and zoxide projects through `sesh connect`
 - Optional tmux/config/zoxide/tmuxinator sources
-- Configurable terminal and launch mode
+- Configurable terminal, launch mode, and sesh config path
 - Kill tmux sessions with `!`
 
 ## Files
@@ -24,6 +24,8 @@ make install
 ```
 
 This installs the plugin into `~/.config/DankMaterialShell/plugins/DMSSesh` and then enables or reloads it in DMS.
+
+By default, DMS Sesh resolves the sesh config from `$XDG_CONFIG_HOME/sesh/sesh.toml` (falling back to `~/.config/sesh/sesh.toml` when `XDG_CONFIG_HOME` is unset). You can override this in the plugin settings with a custom config path.
 
 For a copied install instead of a symlink:
 

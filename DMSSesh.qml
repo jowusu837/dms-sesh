@@ -13,6 +13,7 @@ QtObject {
     signal itemsChanged
 
     property string seshBinary: "sesh"
+    property string configPath: ""
     property string terminal: "alacritty"
     property string customTerminal: ""
     property string terminalBehavior: "newWindow"
@@ -96,6 +97,7 @@ QtObject {
 
         trigger = pluginService.loadPluginData(pluginId, "trigger", "se")
         seshBinary = pluginService.loadPluginData(pluginId, "binaryPath", "sesh")
+        configPath = pluginService.loadPluginData(pluginId, "configPath", "")
         terminal = pluginService.loadPluginData(pluginId, "terminal", "alacritty")
         customTerminal = pluginService.loadPluginData(pluginId, "customTerminal", "")
         terminalBehavior = pluginService.loadPluginData(pluginId, "terminalBehavior", "newWindow")
@@ -130,21 +132,41 @@ QtObject {
         return includeTmux || includeConfig || includeZoxide || includeTmuxinator
     }
 
+    function getConfiguredConfigPath() {
+        return String(configPath || "").trim()
+    }
+
+    function buildSeshArgs(args) {
+        const command = [seshBinary]
+        const configuredConfigPath = getConfiguredConfigPath()
+
+        if (configuredConfigPath) {
+            command.push("-C")
+            command.push(configuredConfigPath)
+        }
+
+        return command.concat(args || [])
+    }
+
+    function buildSeshShellCommand(args) {
+        return "XDG_CONFIG_HOME=\"${XDG_CONFIG_HOME:-$HOME/.config}\" " + shellJoin(buildSeshArgs(args))
+    }
+
     function buildListCommand() {
-        const command = [seshBinary, "list", "-j", "-d"]
+        const args = ["list", "-j", "-d"]
 
         if (includeTmux)
-            command.push("-t")
+            args.push("-t")
         if (includeConfig)
-            command.push("-c")
+            args.push("-c")
         if (includeZoxide)
-            command.push("-z")
+            args.push("-z")
         if (includeTmuxinator)
-            command.push("-T")
+            args.push("-T")
         if (hideAttached)
-            command.push("-H")
+            args.push("-H")
 
-        return hasEnabledSources() ? command : []
+        return hasEnabledSources() ? ["sh", "-lc", buildSeshShellCommand(args)] : []
     }
 
     function parseListData() {
@@ -366,17 +388,17 @@ QtObject {
     }
 
     function launchEntry(payload) {
-        const connectArgs = [seshBinary, "connect"]
+        const connectArgs = ["connect"]
         if (payload.source === "tmuxinator")
             connectArgs.push("-T")
         connectArgs.push(payload.target)
 
         if (terminalBehavior === "switchClient") {
-            const switchArgs = [seshBinary, "connect", "--switch"]
+            const switchArgs = ["connect", "--switch"]
             if (payload.source === "tmuxinator")
                 switchArgs.push("-T")
             switchArgs.push(payload.target)
-            Quickshell.execDetached(switchArgs)
+            Quickshell.execDetached(["sh", "-lc", buildSeshShellCommand(switchArgs)])
             ToastService.showInfo("DMS Sesh", "Switching to " + payload.label)
             return
         }
@@ -399,8 +421,7 @@ QtObject {
         const command = []
         const executable = getTerminalExecutable()
         const execFlag = getTerminalExecFlag()
-        const shellCommand = shellJoin(connectArgs)
-        const launchCommand = "unset TMUX TMUX_PANE; " + shellCommand
+        const launchCommand = "unset TMUX TMUX_PANE; " + buildSeshShellCommand(connectArgs)
 
         command.push(executable)
         execFlag.split(" ").forEach(function(part) {
@@ -451,6 +472,7 @@ QtObject {
     }
 
     onSeshBinaryChanged: persist("binaryPath", seshBinary)
+    onConfigPathChanged: { persist("configPath", configPath); refreshCache() }
     onTerminalChanged: persist("terminal", terminal)
     onCustomTerminalChanged: persist("customTerminal", customTerminal)
     onTerminalBehaviorChanged: persist("terminalBehavior", terminalBehavior)
