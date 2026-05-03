@@ -44,7 +44,7 @@ PluginSettings {
         id: terminalDropdown
         text: "Terminal Emulator"
         description: "Choose which terminal opens sesh connect"
-        currentValue: root.loadValue("terminal", "kitty")
+        currentValue: root.loadValue("terminal", "alacritty")
         options: [
             "st",
             "alacritty",

@@ -13,7 +13,7 @@ QtObject {
     signal itemsChanged
 
     property string seshBinary: "sesh"
-    property string terminal: "kitty"
+    property string terminal: "alacritty"
     property string customTerminal: ""
     property string terminalBehavior: "newWindow"
     property bool includeTmux: true
@@ -96,7 +96,7 @@ QtObject {
 
         trigger = pluginService.loadPluginData(pluginId, "trigger", "se")
         seshBinary = pluginService.loadPluginData(pluginId, "binaryPath", "sesh")
-        terminal = pluginService.loadPluginData(pluginId, "terminal", "kitty")
+        terminal = pluginService.loadPluginData(pluginId, "terminal", "alacritty")
         customTerminal = pluginService.loadPluginData(pluginId, "customTerminal", "")
         terminalBehavior = pluginService.loadPluginData(pluginId, "terminalBehavior", "newWindow")
         includeTmux = pluginService.loadPluginData(pluginId, "includeTmux", true)
@@ -193,12 +193,12 @@ QtObject {
         if (terminal === "Custom" && customTerminal)
             return customTerminal
 
-        const config = terminalConfigs[terminal] || terminalConfigs["kitty"]
+        const config = terminalConfigs[terminal] || terminalConfigs["alacritty"]
         return config.executable
     }
 
     function getTerminalExecFlag() {
-        const config = terminalConfigs[terminal] || terminalConfigs["kitty"]
+        const config = terminalConfigs[terminal] || terminalConfigs["alacritty"]
         return config.execFlag
     }
 
@@ -400,6 +400,7 @@ QtObject {
         const executable = getTerminalExecutable()
         const execFlag = getTerminalExecFlag()
         const shellCommand = shellJoin(connectArgs)
+        const launchCommand = "unset TMUX TMUX_PANE; " + shellCommand
 
         command.push(executable)
         execFlag.split(" ").forEach(function(part) {
@@ -408,7 +409,7 @@ QtObject {
         })
         command.push("sh")
         command.push("-lc")
-        command.push(shellCommand + "; exec \"${SHELL:-/bin/sh}\" -i")
+        command.push(launchCommand + "; status=$?; if [ $status -ne 0 ]; then echo; echo 'sesh connect failed. Press Enter to close...'; read _; fi; exec \"${SHELL:-/bin/sh}\" -i")
 
         Quickshell.execDetached(command)
         ToastService.showInfo("DMS Sesh", "Opening " + label)
