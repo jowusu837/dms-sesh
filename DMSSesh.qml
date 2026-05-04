@@ -394,13 +394,18 @@ QtObject {
         connectArgs.push(payload.target)
 
         if (terminalBehavior === "switchClient") {
-            const switchArgs = ["connect", "--switch"]
-            if (payload.source === "tmuxinator")
-                switchArgs.push("-T")
-            switchArgs.push(payload.target)
-            Quickshell.execDetached(["sh", "-lc", buildSeshShellCommand(switchArgs)])
-            ToastService.showInfo("DMS Sesh", "Switching to " + payload.label)
-            return
+            const hasTmuxClient = !!Quickshell.env("TMUX")
+            if (hasTmuxClient) {
+                const switchArgs = ["connect", "--switch"]
+                if (payload.source === "tmuxinator")
+                    switchArgs.push("-T")
+                switchArgs.push(payload.target)
+                Quickshell.execDetached(["sh", "-lc", buildSeshShellCommand(switchArgs)])
+                ToastService.showInfo("DMS Sesh", "Switching to " + payload.label)
+                return
+            }
+
+            ToastService.showInfo("DMS Sesh", "No tmux client detected, opening in a terminal instead")
         }
 
         if (terminalBehavior === "killExisting") {
