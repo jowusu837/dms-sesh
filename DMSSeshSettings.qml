@@ -138,6 +138,13 @@ PluginSettings {
         defaultValue: false
     }
 
+    ToggleSetting {
+        settingKey: "debugEnabled"
+        label: "Enable debug logging"
+        description: "Write debug logs to ${XDG_CACHE_HOME:-$HOME/.cache}/dms-sesh/debug.log"
+        defaultValue: false
+    }
+
     SliderSetting {
         settingKey: "maxResults"
         label: "Max Results"

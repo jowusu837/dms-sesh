@@ -22,6 +22,7 @@ QtObject {
     property bool includeZoxide: true
     property bool includeTmuxinator: false
     property bool hideAttached: false
+    property bool debugEnabled: false
     property int maxResults: 50
 
     property var cachedEntries: []
@@ -127,6 +128,7 @@ QtObject {
         includeZoxide = pluginService.loadPluginData(pluginId, "includeZoxide", true)
         includeTmuxinator = pluginService.loadPluginData(pluginId, "includeTmuxinator", false)
         hideAttached = pluginService.loadPluginData(pluginId, "hideAttached", false)
+        debugEnabled = pluginService.loadPluginData(pluginId, "debugEnabled", false)
         maxResults = parseInt(pluginService.loadPluginData(pluginId, "maxResults", "50"), 10) || 50
 
         debugLog("plugin initialized", {
@@ -138,6 +140,7 @@ QtObject {
             includeZoxide: includeZoxide,
             includeTmuxinator: includeTmuxinator,
             hideAttached: hideAttached,
+            debugEnabled: debugEnabled,
             maxResults: maxResults,
             debugLogPath: debugLogPath
         })
@@ -606,6 +609,9 @@ QtObject {
     }
 
     function debugLog(message, details) {
+        if (!debugEnabled)
+            return
+
         const timestamp = (new Date()).toISOString()
         let line = timestamp + " " + message
 
@@ -656,5 +662,6 @@ QtObject {
     onIncludeZoxideChanged: { persist("includeZoxide", includeZoxide); refreshCache() }
     onIncludeTmuxinatorChanged: { persist("includeTmuxinator", includeTmuxinator); refreshCache() }
     onHideAttachedChanged: { persist("hideAttached", hideAttached); refreshCache() }
+    onDebugEnabledChanged: persist("debugEnabled", debugEnabled)
     onMaxResultsChanged: persist("maxResults", String(maxResults))
 }
