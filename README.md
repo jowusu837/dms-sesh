@@ -27,6 +27,8 @@ This installs the plugin into `~/.config/DankMaterialShell/plugins/DMSSesh` and 
 
 By default, DMS Sesh resolves the sesh config from `$XDG_CONFIG_HOME/sesh/sesh.toml` (falling back to `~/.config/sesh/sesh.toml` when `XDG_CONFIG_HOME` is unset). You can override this in the plugin settings with a custom config path.
 
+For debugging, the plugin now appends logs to `${XDG_CACHE_HOME:-$HOME/.cache}/dms-sesh/debug.log`.
+
 For a copied install instead of a symlink:
 
 ```bash

@@ -26,6 +26,8 @@ QtObject {
 
     property var cachedEntries: []
     property string listRawData: ""
+    property string listStderrData: ""
+    property string debugLogPath: ((Quickshell.env("XDG_CACHE_HOME") || (Quickshell.env("HOME") ? Quickshell.env("HOME") + "/.cache" : "/tmp")) + "/dms-sesh/debug.log")
 
     readonly property var terminalConfigs: ({
         "st": { executable: "st", execFlag: "-e" },
@@ -48,7 +50,7 @@ QtObject {
     }
 
     property var listProcess: Process {
-        command: ["sesh", "list", "-j", "-d"]
+        command: ["sh", "-lc", "sesh list -j -d"]
         running: false
 
         stdout: SplitParser {
@@ -58,7 +60,26 @@ QtObject {
             }
         }
 
+        stderr: SplitParser {
+            splitMarker: ""
+            onRead: function(data) {
+                root.listStderrData += data
+            }
+        }
+
+        onRunningChanged: {
+            if (running)
+                root.debugLog("list process started", { command: command })
+        }
+
         onExited: function(exitCode) {
+            root.debugLog("list process exited", {
+                exitCode: exitCode,
+                stdoutBytes: root.listRawData.length,
+                stderrBytes: root.listStderrData.length,
+                stderr: root.listStderrData.trim()
+            })
+
             if (exitCode !== 0) {
                 console.warn("DMS Sesh: sesh list failed", exitCode)
                 root.cachedEntries = []
@@ -107,6 +128,19 @@ QtObject {
         includeTmuxinator = pluginService.loadPluginData(pluginId, "includeTmuxinator", false)
         hideAttached = pluginService.loadPluginData(pluginId, "hideAttached", false)
         maxResults = parseInt(pluginService.loadPluginData(pluginId, "maxResults", "50"), 10) || 50
+
+        debugLog("plugin initialized", {
+            trigger: trigger,
+            seshBinary: seshBinary,
+            configPath: configPath,
+            includeTmux: includeTmux,
+            includeConfig: includeConfig,
+            includeZoxide: includeZoxide,
+            includeTmuxinator: includeTmuxinator,
+            hideAttached: hideAttached,
+            maxResults: maxResults,
+            debugLogPath: debugLogPath
+        })
     }
 
     function persist(key, value) {
@@ -116,10 +150,23 @@ QtObject {
 
     function refreshCache() {
         listRawData = ""
+        listStderrData = ""
         cachedEntries = []
 
         const command = buildListCommand()
+        debugLog("refreshing cache", {
+            command: command,
+            seshBinary: seshBinary,
+            configPath: getConfiguredConfigPath(),
+            includeTmux: includeTmux,
+            includeConfig: includeConfig,
+            includeZoxide: includeZoxide,
+            includeTmuxinator: includeTmuxinator,
+            hideAttached: hideAttached
+        })
+
         if (command.length === 0) {
+            debugLog("refresh skipped because no sources are enabled")
             itemsChanged()
             return
         }
@@ -137,7 +184,7 @@ QtObject {
     }
 
     function buildSeshArgs(args) {
-        const command = [seshBinary]
+        const command = [String(seshBinary || "sesh").trim() || "sesh"]
         const configuredConfigPath = getConfiguredConfigPath()
 
         if (configuredConfigPath) {
@@ -149,7 +196,18 @@ QtObject {
     }
 
     function buildSeshShellCommand(args) {
-        return "XDG_CONFIG_HOME=\"${XDG_CONFIG_HOME:-$HOME/.config}\" " + shellJoin(buildSeshArgs(args))
+        const seshArgs = buildSeshArgs(args)
+        const requestedBinary = seshArgs.shift()
+        return "XDG_CONFIG_HOME=\"${XDG_CONFIG_HOME:-$HOME/.config}\"; " +
+            "SESH_BIN=" + shellQuote(requestedBinary) + "; " +
+            "if [ \"${SESH_BIN#*/}\" = \"$SESH_BIN\" ]; then " +
+            "if [ -x \"$HOME/go/bin/$SESH_BIN\" ]; then SESH_BIN=\"$HOME/go/bin/$SESH_BIN\"; " +
+            "elif [ -x \"$HOME/.local/bin/$SESH_BIN\" ]; then SESH_BIN=\"$HOME/.local/bin/$SESH_BIN\"; " +
+            "elif command -v \"$SESH_BIN\" >/dev/null 2>&1; then SESH_BIN=\"$(command -v \"$SESH_BIN\")\"; " +
+            "elif ls \"$HOME/.local/share/mise/installs/go\"/*/bin/\"$SESH_BIN\" >/dev/null 2>&1; then SESH_BIN=\"$(ls \"$HOME/.local/share/mise/installs/go\"/*/bin/\"$SESH_BIN\" | tail -n 1)\"; " +
+            "fi; " +
+            "fi; " +
+            "\"$SESH_BIN\" " + shellJoin(seshArgs)
     }
 
     function buildListCommand() {
@@ -202,10 +260,16 @@ QtObject {
                 })
             }
 
+            debugLog("parsed sesh entries", { count: entries.length })
             cachedEntries = entries
             itemsChanged()
         } catch (error) {
             console.warn("DMS Sesh: failed to parse sesh output", error)
+            debugLog("failed to parse sesh output", {
+                error: String(error),
+                stdoutSample: listRawData.substring(0, 1000),
+                stderr: listStderrData.trim()
+            })
             cachedEntries = []
             itemsChanged()
         }
@@ -287,7 +351,9 @@ QtObject {
             action: encodeAction("connect", {
                 source: entry.source,
                 target: entry.target,
-                label: entry.name
+                label: entry.name,
+                path: entry.path,
+                name: entry.name
             }),
             icon: sourceIcon(entry.source),
             categories: ["DMS Sesh"]
@@ -388,19 +454,22 @@ QtObject {
     }
 
     function launchEntry(payload) {
-        const connectArgs = ["connect"]
-        if (payload.source === "tmuxinator")
-            connectArgs.push("-T")
-        connectArgs.push(payload.target)
+        debugLog("launching entry", payload)
 
+        const resolvedTarget = resolveConnectTarget(payload)
+        debugLog("resolved connect target", {
+            source: payload.source,
+            requestedTarget: payload.target,
+            resolvedTarget: resolvedTarget,
+            path: payload.path
+        })
+
+        const hasTmuxClient = !!Quickshell.env("TMUX")
         if (terminalBehavior === "switchClient") {
-            const hasTmuxClient = !!Quickshell.env("TMUX")
             if (hasTmuxClient) {
-                const switchArgs = ["connect", "--switch"]
-                if (payload.source === "tmuxinator")
-                    switchArgs.push("-T")
-                switchArgs.push(payload.target)
-                Quickshell.execDetached(["sh", "-lc", buildSeshShellCommand(switchArgs)])
+                const switchCommand = buildSwitchShellCommand(payload, resolvedTarget)
+                debugLog("switching via shell command", { shellCommand: switchCommand })
+                Quickshell.execDetached(["sh", "-lc", switchCommand])
                 ToastService.showInfo("DMS Sesh", "Switching to " + payload.label)
                 return
             }
@@ -414,19 +483,92 @@ QtObject {
             killTerminalProcess.running = true
 
             Qt.callLater(function() {
-                launchInTerminal(connectArgs, payload.label)
+                launchInTerminal(payload, resolvedTarget, payload.label)
             })
             return
         }
 
-        launchInTerminal(connectArgs, payload.label)
+        launchInTerminal(payload, resolvedTarget, payload.label)
     }
 
-    function launchInTerminal(connectArgs, label) {
+    function resolveConnectTarget(payload) {
+        if (payload.source === "zoxide" && payload.path) {
+            for (let i = 0; i < cachedEntries.length; i++) {
+                const entry = cachedEntries[i]
+                if (entry.source === "tmux" && entry.path === payload.path && entry.name)
+                    return entry.name
+            }
+        }
+
+        return payload.target
+    }
+
+    function isExistingTmuxTarget(payload, resolvedTarget) {
+        if (payload.source === "tmux")
+            return true
+
+        if (payload.source === "zoxide" && payload.path && resolvedTarget !== payload.path)
+            return true
+
+        return false
+    }
+
+    function buildSwitchShellCommand(payload, resolvedTarget) {
+        if (isExistingTmuxTarget(payload, resolvedTarget))
+            return "tmux switch-client -t " + shellQuote(resolvedTarget)
+
+        const switchArgs = ["connect", "--switch"]
+        if (payload.source === "tmuxinator")
+            switchArgs.push("-T")
+        switchArgs.push(resolvedTarget)
+        return buildSeshShellCommand(switchArgs)
+    }
+
+    function tmuxSessionNameForTarget(payload, resolvedTarget) {
+        if (payload.source === "tmux" && resolvedTarget)
+            return resolvedTarget
+
+        const sourcePath = String(payload.path || resolvedTarget || "")
+        const normalized = sourcePath.replace(/\/+$/, "")
+        const parts = normalized.split("/")
+        return parts.length > 0 ? parts[parts.length - 1] : normalized
+    }
+
+    function buildLaunchShellCommand(payload, resolvedTarget) {
+        if (isExistingTmuxTarget(payload, resolvedTarget))
+            return "unset TMUX TMUX_PANE; tmux attach-session -t " + shellQuote(resolvedTarget)
+
+        const connectArgs = ["connect"]
+        if (payload.source === "tmuxinator")
+            connectArgs.push("-T")
+        connectArgs.push(resolvedTarget)
+
+        const sessionName = tmuxSessionNameForTarget(payload, resolvedTarget)
+        return "unset TMUX TMUX_PANE; " +
+            "SESH_SESSION_NAME=" + shellQuote(sessionName) + "; " +
+            buildSeshShellCommand(connectArgs) + "; " +
+            "status=$?; " +
+            "if [ $status -ne 0 ] && tmux has-session -t \"$SESH_SESSION_NAME\" 2>/dev/null; then " +
+            "tmux attach-session -t \"$SESH_SESSION_NAME\"; " +
+            "else " +
+            "exit $status; " +
+            "fi"
+    }
+
+    function launchInTerminal(payload, resolvedTarget, label) {
         const command = []
         const executable = getTerminalExecutable()
         const execFlag = getTerminalExecFlag()
-        const launchCommand = "unset TMUX TMUX_PANE; " + buildSeshShellCommand(connectArgs)
+        const launchCommand = buildLaunchShellCommand(payload, resolvedTarget)
+
+        debugLog("launching terminal command", {
+            terminal: terminal,
+            executable: executable,
+            execFlag: execFlag,
+            source: payload.source,
+            resolvedTarget: resolvedTarget,
+            shellCommand: launchCommand
+        })
 
         command.push(executable)
         execFlag.split(" ").forEach(function(part) {
@@ -463,6 +605,34 @@ QtObject {
         return slashIndex >= 0 ? firstPart.substring(slashIndex + 1) : firstPart
     }
 
+    function debugLog(message, details) {
+        const timestamp = (new Date()).toISOString()
+        let line = timestamp + " " + message
+
+        if (details !== undefined) {
+            try {
+                line += " " + JSON.stringify(details)
+            } catch (error) {
+                line += " [details-unserializable]"
+            }
+        }
+
+        console.log("DMS Sesh:", line)
+        Quickshell.execDetached([
+            "sh",
+            "-lc",
+            "mkdir -p " + shellQuote(parentDirectory(debugLogPath)) +
+                " && printf '%s\\n' " + shellQuote(line) +
+                " >> " + shellQuote(debugLogPath)
+        ])
+    }
+
+    function parentDirectory(path) {
+        const normalized = String(path || "")
+        const slashIndex = normalized.lastIndexOf("/")
+        return slashIndex > 0 ? normalized.substring(0, slashIndex) : "."
+    }
+
     function shellQuote(value) {
         return "'" + String(value).replace(/'/g, "'\\''") + "'"
     }
@@ -476,7 +646,7 @@ QtObject {
         itemsChanged()
     }
 
-    onSeshBinaryChanged: persist("binaryPath", seshBinary)
+    onSeshBinaryChanged: { persist("binaryPath", seshBinary); refreshCache() }
     onConfigPathChanged: { persist("configPath", configPath); refreshCache() }
     onTerminalChanged: persist("terminal", terminal)
     onCustomTerminalChanged: persist("customTerminal", customTerminal)
